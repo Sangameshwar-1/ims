@@ -1,11 +1,9 @@
 package com.ims.app
 
 import android.app.Application
-import com.ims.app.data.database.ImsDatabase
 import com.ims.app.data.repository.DashboardRepository
 import com.ims.app.data.repository.ExamRepository
 import com.ims.app.data.repository.StudentRepository
-import com.ims.app.util.SeedData
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -16,36 +14,27 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 /**
- * Application class for IMS. Initializes the database and repositories
- * using manual dependency injection (no Hilt/Dagger for simplicity).
+ * Application class for IMS. Initializes the repositories using manual dependency injection.
  */
 class ImsApplication : Application() {
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    val database: ImsDatabase by lazy { ImsDatabase.getDatabase(this) }
-
     val studentRepository: StudentRepository by lazy {
-        StudentRepository(database.studentDao(), database.courseDao())
+        StudentRepository()
     }
 
     val examRepository: ExamRepository by lazy {
-        ExamRepository(database.examDao(), database.courseDao())
+        ExamRepository()
     }
 
     val dashboardRepository: DashboardRepository by lazy {
-        DashboardRepository(
-            database.studentDao(),
-            database.examDao(),
-            database.courseDao(),
-            database.newsDao()
-        )
+        DashboardRepository()
     }
 
     override fun onCreate() {
         super.onCreate()
         sendAppIdentifier()
-        seedDatabase()
     }
 
     /**
@@ -71,19 +60,6 @@ class ImsApplication : Application() {
             }
         } catch (_: Exception) {
             // BuildConfig field might not exist in some build variants
-        }
-    }
-
-    /**
-     * Seeds the database with sample data on first launch.
-     */
-    private fun seedDatabase() {
-        applicationScope.launch {
-            try {
-                SeedData.seedIfEmpty(database)
-            } catch (_: Exception) {
-                // Database already seeded or error — silently continue
-            }
         }
     }
 }

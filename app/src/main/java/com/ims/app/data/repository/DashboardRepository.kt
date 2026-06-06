@@ -1,29 +1,45 @@
 package com.ims.app.data.repository
 
-import com.ims.app.data.dao.CourseDao
-import com.ims.app.data.dao.ExamDao
-import com.ims.app.data.dao.NewsDao
-import com.ims.app.data.dao.StudentDao
+import com.ims.app.data.network.ApiClient
 import com.ims.app.data.model.News
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 
 /**
- * Repository aggregating dashboard-level data from multiple DAOs.
- * Provides counts, recent activity, and news for the dashboard overview.
+ * Repository aggregating dashboard-level data from the API.
  */
-class DashboardRepository(
-    private val studentDao: StudentDao,
-    private val examDao: ExamDao,
-    private val courseDao: CourseDao,
-    private val newsDao: NewsDao
-) {
-    val totalStudents: Flow<Int> = studentDao.getTotalStudentCount()
-    val activeStudents: Flow<Int> = studentDao.getActiveStudentCount()
-    val activeCourseCount: Flow<Int> = courseDao.getActiveCourseCount()
-    val upcomingExamCount: Flow<Int> = examDao.getUpcomingExamCount()
-    val totalExamCount: Flow<Int> = examDao.getTotalExamCount()
-    val latestNews: Flow<List<News>> = newsDao.getLatestNews(5)
+class DashboardRepository {
+    
+    val totalStudents: Flow<Int> = flow {
+        emit(ApiClient.dashboardApi.getDashboardStats().totalStudents)
+    }
+    
+    val activeStudents: Flow<Int> = flow {
+        emit(ApiClient.dashboardApi.getDashboardStats().totalStudents)
+    }
+    
+    val activeCourseCount: Flow<Int> = flow {
+        emit(ApiClient.dashboardApi.getDashboardStats().activeCourses)
+    }
+    
+    val upcomingExamCount: Flow<Int> = flow {
+        emit(ApiClient.dashboardApi.getDashboardStats().upcomingExams)
+    }
+    
+    val totalExamCount: Flow<Int> = flow {
+        // Just return upcoming for now since API doesn't distinguish total yet
+        emit(ApiClient.dashboardApi.getDashboardStats().upcomingExams)
+    }
+    
+    val latestNews: Flow<List<News>> = flow {
+        emit(ApiClient.dashboardApi.getNews().take(5))
+    }
 
-    fun getUpcomingExams() = examDao.getUpcomingExams()
-    fun getRecentStudents() = studentDao.getAllStudents()
+    fun getUpcomingExams() = flow {
+        emit(ApiClient.examApi.getExams().filter { it.status == "Scheduled" })
+    }
+    
+    fun getRecentStudents() = flow {
+        emit(ApiClient.studentApi.getStudents().take(5))
+    }
 }

@@ -1,73 +1,147 @@
 package com.ims.app.data.repository
 
-import com.ims.app.data.dao.CourseDao
-import com.ims.app.data.dao.ExamDao
+import com.ims.app.data.network.ApiClient
 import com.ims.app.data.model.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 
 /**
- * Repository for examination-related data operations.
- * Handles exam creation, result recording, and statistical reporting.
+ * Repository for examination-related data operations via REST API.
  */
-class ExamRepository(
-    private val examDao: ExamDao,
-    private val courseDao: CourseDao
-) {
+class ExamRepository {
+
     // ─── Exams ──────────────────────────────────────────────────
 
-    val allExams: Flow<List<Exam>> = examDao.getAllExams()
-    val totalExamCount: Flow<Int> = examDao.getTotalExamCount()
-    val upcomingExamCount: Flow<Int> = examDao.getUpcomingExamCount()
-    val upcomingExams: Flow<List<Exam>> = examDao.getUpcomingExams()
+    val allExams: Flow<List<Exam>> = flow {
+        emit(ApiClient.examApi.getExams())
+    }
+    
+    val totalExamCount: Flow<Int> = flow {
+        emit(ApiClient.examApi.getExams().size)
+    }
+    
+    val upcomingExamCount: Flow<Int> = flow {
+        emit(ApiClient.examApi.getExams().count { it.status == "Scheduled" })
+    }
+    
+    val upcomingExams: Flow<List<Exam>> = flow {
+        emit(ApiClient.examApi.getExams().filter { it.status == "Scheduled" })
+    }
 
-    suspend fun insertExam(exam: Exam): Long = examDao.insertExam(exam)
-    suspend fun updateExam(exam: Exam) = examDao.updateExam(exam)
-    suspend fun deleteExam(exam: Exam) = examDao.deleteExam(exam)
-    suspend fun getExamById(id: Long): Exam? = examDao.getExamById(id)
+    suspend fun insertExam(exam: Exam): Long {
+        val created = ApiClient.examApi.createExam(exam)
+        return created.id
+    }
+    
+    suspend fun updateExam(exam: Exam) {
+        ApiClient.examApi.updateExam(exam.id.toString(), exam)
+    }
+    
+    suspend fun deleteExam(exam: Exam) {
+        ApiClient.examApi.deleteExam(exam.id.toString())
+    }
+    
+    suspend fun getExamById(id: Long): Exam? {
+        return ApiClient.examApi.getExams().find { it.id == id }
+    }
 
-    fun getExamsByStatus(status: String): Flow<List<Exam>> = examDao.getExamsByStatus(status)
-    fun getExamsByCourse(courseId: Long): Flow<List<Exam>> = examDao.getExamsByCourse(courseId)
-    fun getExamsByBatch(batchId: Long): Flow<List<Exam>> = examDao.getExamsByBatch(batchId)
-    fun getExamsBySubject(subjectId: Long): Flow<List<Exam>> = examDao.getExamsBySubject(subjectId)
-    fun searchExams(query: String): Flow<List<Exam>> = examDao.searchExams(query)
+    fun getExamsByStatus(status: String): Flow<List<Exam>> = flow {
+        emit(ApiClient.examApi.getExams().filter { it.status == status })
+    }
+    
+    fun getExamsByCourse(courseId: Long): Flow<List<Exam>> = flow {
+        emit(ApiClient.examApi.getExams().filter { it.courseId == courseId })
+    }
+    
+    fun getExamsByBatch(batchId: Long): Flow<List<Exam>> = flow {
+        emit(ApiClient.examApi.getExams().filter { it.batchId == batchId })
+    }
+    
+    fun getExamsBySubject(subjectId: Long): Flow<List<Exam>> = flow {
+        emit(ApiClient.examApi.getExams().filter { it.subjectId == subjectId })
+    }
+    
+    fun searchExams(query: String): Flow<List<Exam>> = flow {
+        val q = query.lowercase()
+        emit(ApiClient.examApi.getExams().filter { it.name.lowercase().contains(q) })
+    }
 
     // ─── Results ────────────────────────────────────────────────
 
-    suspend fun insertResult(result: ExamResult): Long = examDao.insertResult(result)
-    suspend fun insertResults(results: List<ExamResult>) = examDao.insertResults(results)
-    suspend fun updateResult(result: ExamResult) = examDao.updateResult(result)
-    suspend fun deleteResult(result: ExamResult) = examDao.deleteResult(result)
+    suspend fun insertResult(result: ExamResult): Long {
+        val created = ApiClient.examApi.createExamResult(result)
+        return created.id
+    }
+    
+    suspend fun insertResults(results: List<ExamResult>) {
+        results.forEach { ApiClient.examApi.createExamResult(it) }
+    }
+    
+    suspend fun updateResult(result: ExamResult) {
+        // Mock update for now
+    }
+    
+    suspend fun deleteResult(result: ExamResult) {
+        // Mock delete
+    }
 
-    fun getResultsByExam(examId: Long): Flow<List<ExamResult>> = examDao.getResultsByExam(examId)
-    fun getResultsByStudent(studentId: Long): Flow<List<ExamResult>> = examDao.getResultsByStudent(studentId)
-    suspend fun getResult(examId: Long, studentId: Long): ExamResult? = examDao.getResult(examId, studentId)
+    fun getResultsByExam(examId: Long): Flow<List<ExamResult>> = flow {
+        emit(ApiClient.examApi.getExamResults().filter { it.examId == examId })
+    }
+    
+    fun getResultsByStudent(studentId: Long): Flow<List<ExamResult>> = flow {
+        emit(ApiClient.examApi.getExamResults().filter { it.studentId == studentId })
+    }
+    
+    suspend fun getResult(examId: Long, studentId: Long): ExamResult? {
+        return ApiClient.examApi.getExamResults().find { it.examId == examId && it.studentId == studentId }
+    }
 
     // ─── Statistics ─────────────────────────────────────────────
 
     suspend fun getExamStats(examId: Long): ExamStats {
-        val avg = examDao.getAverageMarks(examId) ?: 0.0
-        val highest = examDao.getHighestMarks(examId) ?: 0.0
-        val lowest = examDao.getLowestMarks(examId) ?: 0.0
-        val passCount = examDao.getPassCount(examId)
-        val totalAttempted = examDao.getTotalAttempted(examId)
+        val results = ApiClient.examApi.getExamResults().filter { it.examId == examId }
+        if (results.isEmpty()) return ExamStats(0.0, 0.0, 0.0, 0.0)
+
+        val marks = results.map { it.marksObtained }
+        val avg = marks.average()
+        val highest = marks.maxOrNull() ?: 0.0
+        val lowest = marks.minOrNull() ?: 0.0
+        
+        val passCount = results.count { it.status == "Passed" }
+        val totalAttempted = results.size
         val passPercentage = if (totalAttempted > 0) (passCount.toDouble() / totalAttempted) * 100 else 0.0
 
         return ExamStats(
             averageScore = avg,
             passPercentage = passPercentage,
-            highestScore = highest,
-            lowestScore = lowest
+            highestScore = highest.toDouble(),
+            lowestScore = lowest.toDouble()
         )
     }
 
-    // ─── Courses & Subjects (for exam creation dropdowns) ──────
+    // ─── Courses & Subjects ──────────────────────────────────────
 
-    val activeCourses: Flow<List<Course>> = courseDao.getActiveCourses()
-    val activeSubjects: Flow<List<Subject>> = courseDao.getAllActiveSubjects()
-    val activeBatches: Flow<List<Batch>> = courseDao.getAllActiveBatches()
+    val activeCourses: Flow<List<Course>> = flow {
+        emit(ApiClient.courseApi.getCourses().filter { it.status == "Active" })
+    }
+    
+    val activeSubjects: Flow<List<Subject>> = flow {
+        emit(emptyList<Subject>()) // Need Subject API if actually used
+    }
+    
+    val activeBatches: Flow<List<Batch>> = flow {
+        emit(ApiClient.courseApi.getBatches().filter { it.status == "Active" })
+    }
 
-    fun getSubjectsByCourse(courseId: Long): Flow<List<Subject>> = courseDao.getSubjectsByCourse(courseId)
-    fun getBatchesByCourse(courseId: Long): Flow<List<Batch>> = courseDao.getBatchesByCourse(courseId)
-    suspend fun getCourseById(id: Long): Course? = courseDao.getCourseById(id)
-    suspend fun getSubjectById(id: Long): Subject? = courseDao.getSubjectById(id)
+    fun getSubjectsByCourse(courseId: Long): Flow<List<Subject>> = flow { emit(emptyList()) }
+    fun getBatchesByCourse(courseId: Long): Flow<List<Batch>> = flow {
+        emit(ApiClient.courseApi.getBatches().filter { it.courseId == courseId })
+    }
+    
+    suspend fun getCourseById(id: Long): Course? {
+        return ApiClient.courseApi.getCourses().find { it.id == id }
+    }
+    
+    suspend fun getSubjectById(id: Long): Subject? = null
 }
