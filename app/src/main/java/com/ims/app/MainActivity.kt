@@ -22,6 +22,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.ims.app.ui.navigation.ImsNavGraph
 import com.ims.app.ui.navigation.Screen
+import com.ims.app.ui.screens.splash.SplashScreen
 import com.ims.app.ui.theme.*
 
 /**
@@ -34,7 +35,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             ImsTheme {
-                ImsApp()
+                var showSplash by remember { mutableStateOf(true) }
+                if (showSplash) {
+                    SplashScreen(onComplete = { showSplash = false })
+                } else {
+                    ImsApp()
+                }
             }
         }
     }
